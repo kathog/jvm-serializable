@@ -12,9 +12,9 @@ pub mod java {
         
         use serde::Serialize;
         use std::any::*;
-        use rustc_serialize::json::{Encoder, Json};
-        use rustc_serialize::json::Json::Object;
-        use rustc_serialize::Encodable;
+        use serde_reflection::{ContainerFormat, Error, Format, Samples, Tracer, TracerConfig};
+        use std::collections::HashMap;
+        use std::sync::Mutex;
         
 
         fn type_of<T>(o: &T) -> &'static str {
@@ -32,37 +32,56 @@ pub mod java {
         }
 
         pub struct ObjectOutputStream {
-            bout : Vec<u8>
-
+            bout : Vec<u8>,
+            values: HashMap<String, Tracer>
         }
 
         impl ObjectOutputStream {
 
             pub fn new() -> ObjectOutputStream {
                 return ObjectOutputStream {
-                    bout : Vec::new()
+                    bout : Vec::new(),
+                    values: HashMap::new()
                 };
             }
 
-            pub fn write_object<SER>(&self, object: &SER) 
-            where SER: Serialize + Any + Encodable + Serializable, {
-                println!("{:?}", type_of(object));
-                println!("{:?}", type_id(object));
+            #[inline]
+            pub fn write_object<SER>(&mut self, object: &SER) 
+            where SER: Serialize + Any + Serializable, {
+                // println!("{:?}", type_of(object));
+                // println!("{:?}", type_id(object));
 
-                let mut json = "".to_owned();
-                {
-                    let mut encoder = Encoder::new(&mut json);
-                    object.encode(&mut encoder).unwrap();
-                }
-                let json = Json::from_str(&json).unwrap();
-                if let Object(object) = json {
-                    let field_names: Vec<_> = object.keys().collect();
-                    println!("{:?}", field_names);
-                }
+                // if object.type_id() == TypeId::of::<String>() {
 
-                println!("{:?}", object.java_class_name());
-                println!("{:?}", object.serial_version_uid());
+                // }
 
+                        let mut cfg = TracerConfig::default().is_human_readable(false)
+                                .record_samples_for_newtype_structs(false)
+                                .record_samples_for_structs(true)
+                                .record_samples_for_tuple_structs(false);
+                
+                        let mut tracer = Tracer::new(cfg);
+                        let mut samples = Samples::new();
+                        tracer.trace_value(&mut samples, object).unwrap();
+
+                
+                // let registry = tracer.registry().unwrap();
+
+                // println!("{:?}", time.elapsed());
+                // println!("{:?}", samples);
+
+                // let time = std::time::Instant::now();
+                // let v = serde_json::to_value(object).unwrap();
+                // println!("json value {:?}", time.elapsed());
+                // println!("json value {:?}", v);
+
+
+                // println!("{:?}", object.java_class_name());
+                // println!("{:?}", object.serial_version_uid());
+
+                
+
+                
             }
 
         }
