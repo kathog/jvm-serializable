@@ -2,7 +2,7 @@
 extern crate serde;
 #[macro_use]
 extern crate jvm_macro;
-use jvm_macro::jvm_object;
+use jvm_macro::*;
 
 #[cfg(test)]
 mod tests {
@@ -11,30 +11,17 @@ mod tests {
     extern crate jvm_serializable;
     use jvm_serializable::java::io::*;
     
-    #[jvm_object]
+    #[jvm_object(io.vertx.core.net.impl.ServerID)]
     struct ServerID {
         port: i32,
         host: String
     }
 
-    // impl Serializable for ServerID {
-    //     fn java_class_name (&self) -> String {
-    //         "io.vertx.core.net.impl.ServerID".to_string()
-    //     }
-    // }
-
-    #[jvm_object]
+    #[jvm_object(io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo)]
     struct ClusterNodeInfo {
         nodeId: String,
         serverID: ServerID
     }
-
-    // impl Serializable for ClusterNodeInfo {
-    //     fn java_class_name (&self) -> String {
-    //         "io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo".to_string()
-    //     }
-    // }
-
 
     #[test] 
     fn it_works() {

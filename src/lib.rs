@@ -44,7 +44,7 @@ pub mod java {
             }
 
             pub fn write_object<SER>(&self, object: &SER) 
-            where SER: Serialize + Any + Encodable, {
+            where SER: Serialize + Any + Encodable + Serializable, {
                 println!("{:?}", type_of(object));
                 println!("{:?}", type_id(object));
 
@@ -58,6 +58,9 @@ pub mod java {
                     let field_names: Vec<_> = object.keys().collect();
                     println!("{:?}", field_names);
                 }
+
+                println!("{:?}", object.java_class_name());
+
             }
 
         }
