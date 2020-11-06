@@ -11,13 +11,13 @@ mod tests {
     extern crate jvm_serializable;
     use jvm_serializable::java::io::*;
     
-    #[jvm_object(io.vertx.core.net.impl.ServerID)]
+    #[jvm_object(io.vertx.core.net.impl.ServerID,5435534543543)]
     struct ServerID {
         port: i32,
         host: String
     }
 
-    #[jvm_object(io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo)]
+    #[jvm_object(io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo,453453453454)]
     struct ClusterNodeInfo {
         nodeId: String,
         serverID: ServerID
@@ -34,10 +34,6 @@ mod tests {
             }
         };
 
-
-        // let java_class = node_id.java_class_name();
-        // println! ("{:?}", java_class);
-        // node_id.serverID.serialize()
 
         let oos = ObjectOutputStream::new();
         oos.write_object(&node_id);

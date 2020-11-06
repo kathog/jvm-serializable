@@ -15,5 +15,4 @@ rustc-serialize = "0.3"
 quote = "1.0"
 syn = { version = "1.0", features = ["full", "fold", "parsing"] }
 proc-macro2  = "1.0"
-macro_rules_attribute = { version = "0.0.1", features = ["verbose-expansions"] }
 

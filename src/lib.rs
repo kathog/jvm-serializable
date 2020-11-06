@@ -28,6 +28,7 @@ pub mod java {
 
         pub trait Serializable {
             fn java_class_name (&self) -> String;
+            fn serial_version_uid(&self) -> u64;
         }
 
         pub struct ObjectOutputStream {
@@ -60,6 +61,7 @@ pub mod java {
                 }
 
                 println!("{:?}", object.java_class_name());
+                println!("{:?}", object.serial_version_uid());
 
             }
 
