@@ -7,6 +7,7 @@ extern crate jvm_macro;
 extern crate jvm_serializable;
 use jvm_serializable::java::io::*;
 
+
 #[jvm_object(io.vertx.core.net.impl.ServerID,5435534543543)]
     struct ServerID {
         port: i32,

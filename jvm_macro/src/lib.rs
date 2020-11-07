@@ -4,25 +4,129 @@ extern crate proc_macro2;
 extern crate quote;
 extern crate syn;
 
-
 use proc_macro2::TokenStream;
 use std::str::FromStr;
+use std::collections::HashMap;
+use proc_macro2::TokenTree;
 
 #[proc_macro_attribute]
 pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: TokenStream = input.into();
+    let input: TokenStream = input.clone().into();
+
+    let tokens = input.clone().into_iter().peekable();
+    let struct_body : TokenStream;
+    let mut struct_props = HashMap::new();
+
+    for t in tokens {
+
+        match t{
+            TokenTree::Group(struct_body) => {
+                let mut struct_iter = struct_body.stream().into_iter();
+                let mut field_name = String::new();
+                let mut field_type = String::new();
+                loop {
+                    let struct_body_token =  match struct_iter.next() {
+                        None => break,
+                        Some(t) => t,
+                    };
+                    match &struct_body_token {
+                        TokenTree::Ident(ident) => {
+                            field_name = ident.to_string();
+                        },
+                        TokenTree::Punct(punct) => {
+                            if punct.as_char() == ':'{
+                                let mut brak_ref = 0;
+                                loop {
+                                    let line_toke2 = struct_iter.next();
+                                    let line_token = match line_toke2{
+                                        None => {
+                                            struct_props.insert(field_name.clone(), field_type.clone());
+                                            break
+                                        },
+                                        Some(t) => t,
+                                    };
+
+                                    match &line_token{
+                                        TokenTree::Punct(line_p) =>{
+                                            match line_p.as_char() {
+                                                ',' | '}' => {
+                                                    if brak_ref == 0 {
+                                                        struct_props.insert(field_name, field_type);
+                                                        field_name = String::new();
+                                                        field_type = String::new();
+                                                        break;
+                                                    }
+                                                },
+                                                '<' => { brak_ref +=1; },
+                                                '>' => { brak_ref-=1; },
+                                                _ => {},
+                                            }
+                                        },
+                                        TokenTree::Ident(_)=> {
+                                            if !field_type.ends_with('\''){
+                                                field_type.push(' ');
+                                            }
+                                        },
+                                        _ => {},
+                                    }
+                                    field_type.push_str(&line_token.to_string());
+                                }
+                            }
+                            continue;
+                        },
+                        _ => {},
+                    }
+                }
+            },
+            _ => {},
+        }
+    }
+
+    let struct_name = input.clone()
+        .into_iter()
+        .filter(|x| match x{
+            TokenTree::Ident(_) => true,
+            _ => false,
+        })
+        .last()
+        .unwrap()
+        .to_string();
+
+
+
     let output = quote! {
-        #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
+        #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, RustcEncodable)]
         #input
     }; 
     let mut out_as_string = output.to_string();
     let jvm_params = metadata.to_string().replace(" ", "");
     let jvm_params: Vec<&str> = jvm_params.split(',').collect();
 
-    // println!("{:?}", "#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)] struct\n".len());
+    let mut get_body = String::new();
+    get_body.push_str("{ match field \n\r{");
+    for (field,datatype) in &struct_props {
+        get_body.push_str(&format!(
+            "\"{field}\" => &(s.{field}) as &dyn std::any::Any,\n\r",
+            field=field
+        ));
+    }
+    get_body.push_str("_ => panic!(\"Invalid field.\"), }}");
 
-    let idx = out_as_string.find("{").unwrap();
-    let name_of_struct = String::from_utf8_lossy(&out_as_string.as_bytes()[70..idx]);
+    let mut set_body = String::new();
+    set_body.push_str("match field {");
+    for (field,datatype) in &struct_props {
+        set_body.push_str(&format!("
+            \"{field}\" => {{ s.{field} = ((&val as &dyn std::any::Any).downcast_ref::<{datatype}>().unwrap()).to_owned(); }},\r\n",
+                                   field=field,
+                                   datatype=datatype
+        ));
+
+    }
+    set_body.push_str("_ => { panic!(\"invalid field\"); } }");
+
+    println!("{:?}", struct_props);
+
+
     let impl_value = r#"
     impl Serializable for {{struct_name}} {
         #[inline]
@@ -35,7 +139,21 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
             {{jvm_uid}}
         }
 
+        fn get_field<T: Clone + 'static>(s: &Self, field: &str) -> T {{
+            let a : &dyn std::any::Any = {{get_body}};
+            (a.downcast_ref::<T>().unwrap().clone())
+        }}
+
+        fn set_field<T: Clone + 'static>(s: &mut Self, field: &str, val : T) {{
+            {{set_body}}
+        }}
+
     }"#;
-    out_as_string = out_as_string.clone() + &impl_value.replace("{{struct_name}}", &name_of_struct).replace("{{jvm_class}}", &jvm_params[0]).replace("{{jvm_uid}}", &jvm_params[1]);
+    out_as_string = out_as_string.clone() + &impl_value.replace("{{struct_name}}", &struct_name)
+        .replace("{{jvm_class}}", &jvm_params[0])
+        .replace("{{jvm_uid}}", &jvm_params[1])
+        .replace("{{set_body}}", &set_body)
+        .replace("{{get_body}}", &get_body);
+    // println!("{:?}", out_as_string);
     proc_macro::TokenStream::from_str(&out_as_string).unwrap()
 }
