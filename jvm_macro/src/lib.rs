@@ -37,8 +37,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
                             if punct.as_char() == ':'{
                                 let mut brak_ref = 0;
                                 loop {
-                                    let line_toke2 = struct_iter.next();
-                                    let line_token = match line_toke2{
+                                    let line_token = match struct_iter.next() {
                                         None => {
                                             struct_props.insert(field_name.clone(), field_type.clone());
                                             break
@@ -47,7 +46,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
                                     };
 
                                     match &line_token{
-                                        TokenTree::Punct(line_p) =>{
+                                        TokenTree::Punct(line_p) => {
                                             match line_p.as_char() {
                                                 ',' | '}' => {
                                                     if brak_ref == 0 {
@@ -62,8 +61,8 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
                                                 _ => {},
                                             }
                                         },
-                                        TokenTree::Ident(_)=> {
-                                            if !field_type.ends_with('\''){
+                                        TokenTree::Ident(_) => {
+                                            if !field_type.ends_with('\'') {
                                                 field_type.push(' ');
                                             }
                                         },
@@ -82,20 +81,15 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
         }
     }
 
-    let struct_name = input.clone()
-        .into_iter()
-        .filter(|x| match x{
+    let struct_name = input.clone().into_iter().filter(|x| match x {
             TokenTree::Ident(_) => true,
             _ => false,
-        })
-        .last()
-        .unwrap()
-        .to_string();
+        }).last().unwrap().to_string();
 
 
 
     let output = quote! {
-        #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, RustcEncodable)]
+        #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
         #input
     }; 
     let mut out_as_string = output.to_string();
@@ -124,7 +118,12 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
     }
     set_body.push_str("_ => { panic!(\"invalid field\"); } }");
 
-    println!("{:?}", struct_props);
+    let mut struct_props_as_string = String::from("[");
+    for (key, value) in struct_props {
+        struct_props_as_string.push_str(&format!("(\"{}\".to_string(), \"{}\".to_string()),", key, value));
+    }
+    struct_props_as_string.remove(struct_props_as_string.len()-1);
+    struct_props_as_string.push_str("].iter().cloned().collect()");
 
 
     let impl_value = r#"
@@ -148,12 +147,18 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
             {{set_body}}
         }}
 
+        fn get_fields() -> std::collections::HashMap<String, String> {
+            {{fields_string}}
+        }
+
     }"#;
-    out_as_string = out_as_string.clone() + &impl_value.replace("{{struct_name}}", &struct_name)
+    out_as_string.push_str(&impl_value.replace("{{struct_name}}", &struct_name)
         .replace("{{jvm_class}}", &jvm_params[0])
         .replace("{{jvm_uid}}", &jvm_params[1])
         .replace("{{set_body}}", &set_body)
-        .replace("{{get_body}}", &get_body);
+        .replace("{{get_body}}", &get_body)
+        .replace("{{fields_string}}", &struct_props_as_string)
+    );
     // println!("{:?}", out_as_string);
     proc_macro::TokenStream::from_str(&out_as_string).unwrap()
 }

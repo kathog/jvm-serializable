@@ -10,6 +10,7 @@ mod tests {
     extern crate serde;
     extern crate jvm_serializable;
     use jvm_serializable::java::io::*;
+    use std::collections::HashMap;
 
     #[jvm_object(io.vertx.core.net.impl.ServerID,5435534543543)]
     struct ServerID {
@@ -48,19 +49,16 @@ mod tests {
        let mut oos = ObjectOutputStream::new();
 
         for i in 0..10 {
-            let node_id = ClusterNodeInfo {
+            let mut node_id = ClusterNodeInfo {
                 nodeId: uuid::Uuid::new_v4().to_string(),
                 serverID: ServerID{
                     port: 45000,
                     host: String::from("localhost")
                 }
             };
-            println!("{:?}", ClusterNodeInfo::get_field::<ServerID>(&node_id, "serverID"));
+            ServerID::set_field::<i32>(&mut node_id.serverID, "port", 1234);
+            println!("{:?}", &node_id);
             oos.write_object(&node_id);
         }
-        
-
-
-        assert_eq!(2 + 2, 4);
     }
 }
