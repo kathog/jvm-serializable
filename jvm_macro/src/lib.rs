@@ -14,7 +14,6 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
     let input: TokenStream = input.clone().into();
 
     let tokens = input.clone().into_iter().peekable();
-    let struct_body : TokenStream;
     let mut struct_props = HashMap::new();
 
     for t in tokens {
@@ -39,7 +38,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
                                 loop {
                                     let line_token = match struct_iter.next() {
                                         None => {
-                                            struct_props.insert(field_name.clone(), field_type.clone());
+                                            struct_props.insert(field_name.clone(), field_type.clone().trim().to_string());
                                             break
                                         },
                                         Some(t) => t,
@@ -50,7 +49,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
                                             match line_p.as_char() {
                                                 ',' | '}' => {
                                                     if brak_ref == 0 {
-                                                        struct_props.insert(field_name, field_type);
+                                                        struct_props.insert(field_name, field_type.trim().to_string());
                                                         field_name = String::new();
                                                         field_type = String::new();
                                                         break;
@@ -98,7 +97,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
 
     let mut get_body = String::new();
     get_body.push_str("{ match field \n\r{");
-    for (field,datatype) in &struct_props {
+    for (field, _datatype) in &struct_props {
         get_body.push_str(&format!(
             "\"{field}\" => &(s.{field}) as &dyn std::any::Any,\n\r",
             field=field
@@ -119,11 +118,21 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
     set_body.push_str("_ => { panic!(\"invalid field\"); } }");
 
     let mut struct_props_as_string = String::from("[");
-    for (key, value) in struct_props {
+    for (key, value) in &struct_props {
         struct_props_as_string.push_str(&format!("(\"{}\".to_string(), \"{}\".to_string()),", key, value));
     }
     struct_props_as_string.remove(struct_props_as_string.len()-1);
     struct_props_as_string.push_str("].iter().cloned().collect()");
+
+    let mut get_body_as_string = String::new();
+    get_body_as_string.push_str("{ match field \n\r{");
+    for (field, _datatype) in &struct_props {
+        get_body_as_string.push_str(&format!(
+            "\"{field}\" => serde_json::to_value(s.{field}.clone()).unwrap() ,\n\r",
+            field=field
+        ));
+    }
+    get_body_as_string.push_str("_ => panic!(\"Invalid field.\"), }}");
 
 
     let impl_value = r#"
@@ -138,12 +147,16 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
             {{jvm_uid}}
         }
 
-        fn get_field<T: Clone + 'static>(s: &Self, field: &str) -> T {{
+        fn get_field<T: std::any::Any + Clone + 'static>(s: &Self, field: &str) -> T {{
             let a : &dyn std::any::Any = {{get_body}};
             (a.downcast_ref::<T>().unwrap().clone())
         }}
 
-        fn set_field<T: Clone + 'static>(s: &mut Self, field: &str, val : T) {{
+        fn get_field_as_value(s: &Self, field: &str) -> serde_json::Value {
+            {{get_body_as_string}}
+        }
+
+        fn set_field<T: std::any::Any + Clone + 'static>(s: &mut Self, field: &str, val : T) {{
             {{set_body}}
         }}
 
@@ -158,6 +171,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
         .replace("{{set_body}}", &set_body)
         .replace("{{get_body}}", &get_body)
         .replace("{{fields_string}}", &struct_props_as_string)
+        .replace("{{get_body_as_string}}", &get_body_as_string)
     );
     // println!("{:?}", out_as_string);
     proc_macro::TokenStream::from_str(&out_as_string).unwrap()
