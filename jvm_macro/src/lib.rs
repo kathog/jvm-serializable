@@ -2,15 +2,49 @@ extern crate proc_macro;
 extern crate proc_macro2;
 #[macro_use]
 extern crate quote;
+#[macro_use]
 extern crate syn;
+extern crate serde_derive_internals;
+#[macro_use]
+extern crate serde;
 
 use proc_macro2::TokenStream;
 use std::str::FromStr;
 use std::collections::HashMap;
 use proc_macro2::TokenTree;
 
+use serde_derive_internals::*;
+use syn::*;
+use std::any::Any;
+
 #[proc_macro_attribute]
 pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+
+    let tmp = input.clone();
+    let derive_input = syn::parse_macro_input!(tmp as syn::DeriveInput);
+    println!("dupa!!!!!!");
+    println!("attrs : {}", derive_input.attrs.len());
+    for a in derive_input.attrs {
+
+    }
+    match derive_input.data {
+        Data::Struct(data_struct) => {
+            println!("fields : {}", data_struct.fields.len());
+            for f in data_struct.fields {
+
+                println!("attrs : {:?}", f.type_id());
+                // println!("attrs : {:?}", );
+                for a in f.attrs {
+                    println!("{:?}", a.parse_meta().unwrap().path().get_ident());
+                }
+
+            }
+
+        },
+        _ => {}
+    }
+
+
     let input: TokenStream = input.clone().into();
 
     let tokens = input.clone().into_iter().peekable();
@@ -117,22 +151,28 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
     }
     set_body.push_str("_ => { panic!(\"invalid field\"); } }");
 
+
+    println!("{:?}", struct_props);
+
     let mut struct_props_as_string = String::from("[");
+    let mut idx = 0;
     for (key, value) in &struct_props {
-        struct_props_as_string.push_str(&format!("(\"{}\".to_string(), \"{}\".to_string()),", key, value));
+        struct_props_as_string.push_str(&format!("(\"{}\".to_string(), \"{}\".to_string(), {}),", key, value, idx));
+        idx += 1;
     }
     struct_props_as_string.remove(struct_props_as_string.len()-1);
     struct_props_as_string.push_str("].iter().cloned().collect()");
 
-    let mut get_body_as_string = String::new();
-    get_body_as_string.push_str("{ match field \n\r{");
-    for (field, _datatype) in &struct_props {
-        get_body_as_string.push_str(&format!(
-            "\"{field}\" => serde_json::to_value(s.{field}.clone()).unwrap() ,\n\r",
-            field=field
-        ));
-    }
-    get_body_as_string.push_str("_ => panic!(\"Invalid field.\"), }}");
+    // let mut get_body_as_string = String::new();
+    // get_body_as_string.push_str("{ match field \n\r{");
+    // for (field, _datatype) in &struct_props {
+    //     get_body_as_string.push_str(&format!(
+    //         "\"{field}\" => serde_json::to_value(s.{field}.clone()).unwrap() ,\n\r",
+    //         field=field
+    //     ));
+    // }
+    // get_body_as_string.push_str("_ => panic!(\"Invalid field.\"), }}");
+
 
 
     let impl_value = r#"
@@ -152,15 +192,11 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
             (a.downcast_ref::<T>().unwrap().clone())
         }}
 
-        fn get_field_as_value(s: &Self, field: &str) -> serde_json::Value {
-            {{get_body_as_string}}
-        }
-
         fn set_field<T: std::any::Any + Clone + 'static>(s: &mut Self, field: &str, val : T) {{
             {{set_body}}
         }}
 
-        fn get_fields() -> std::collections::HashMap<String, String> {
+        fn get_fields() -> Vec<(String, String, i32)> {
             {{fields_string}}
         }
 
@@ -171,7 +207,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
         .replace("{{set_body}}", &set_body)
         .replace("{{get_body}}", &get_body)
         .replace("{{fields_string}}", &struct_props_as_string)
-        .replace("{{get_body_as_string}}", &get_body_as_string)
+        // .replace("{{get_body_as_string}}", &get_body_as_string)
     );
     // println!("{:?}", out_as_string);
     proc_macro::TokenStream::from_str(&out_as_string).unwrap()

@@ -76,9 +76,8 @@ mod tests {
     #[test] 
     fn it_works() {
 
-       let mut oos = ObjectOutputStream::new();
-
         for i in 0..10 {
+            let mut oos = ObjectOutputStream::new();
             let mut node_id = ClusterNodeInfo {
                 nodeId: uuid::Uuid::new_v4().to_string(),
                 serverID : ServerID {

@@ -25,9 +25,10 @@ pub mod java {
         use traitcast::TraitcastFrom;
         use serde_json::ser::State;
         use serde::ser::{SerializeSeq, SerializeTuple, SerializeTupleStruct, SerializeTupleVariant, SerializeMap, SerializeStructVariant, SerializeStruct};
-        use serde::export::Formatter;
+        use serde::export::{Formatter, TryFrom};
         use std::fmt;
         use std::sync::atomic::{AtomicBool, Ordering};
+
 
 
         fn type_of<T>(o: &T) -> &'static str {
@@ -43,8 +44,8 @@ pub mod java {
             fn serial_version_uid(&self) -> u64;
             fn get_field<T: Any + Clone + 'static>(s: &Self, field: &str) -> T;
             fn set_field<T: Any + Clone + 'static>(s: &mut Self, field: &str, val : T);
-            fn get_fields() -> std::collections::HashMap<String, String>;
-            fn get_field_as_value(s: &Self, field: &str) -> serde_json::Value;
+            fn get_fields() -> Vec<(String, String, i32)>;
+            // fn get_field_as_value(s: &Self, field: &str) -> serde_json::Value;
             // fn serialize(&self) -> Vec<u8>;
         }
 
@@ -76,18 +77,23 @@ pub mod java {
 
 
                 let mut jvm_ser = JvmSerializer {
-                    buf: vec![],
-                    inner: AtomicBool::new(false)
+                    buf: Vec::with_capacity(1024),
+                    inner: AtomicBool::new(false),
+                    value_buf: Vec::with_capacity(1024),
+                    metadata_structs : HashMap::new()
                 };
 
                 jvm_ser.write_head(object);
-                // object.serialize(&mut jvm_ser);
+                object.serialize(&mut jvm_ser);
 
-                let set_data = serde_json::to_value(object);
-                // println!("{:?}", set_data);
+                // let x = serde_derive_internals::ast::Container::try_from(object.clone()).unwrap();
+
+                // let set_data = serde_json::to_value(object);
+                // let cont : Cont object.try_into()
+
 
                 // println!("{:?}", jvm_ser.buff());
-                // println!("{:?}", String::from_utf8_lossy(&jvm_ser.buff()));
+                println!("{:?}", String::from_utf8_lossy(&jvm_ser.buff()));
 
             }
 
@@ -180,6 +186,7 @@ pub mod java {
             type Ok = ();
             type Error = Error;
 
+
             #[inline]
             fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error> where
                 T: ?Sized + Serialize {
@@ -195,17 +202,15 @@ pub mod java {
                         }
                         None => {
                             if self.ser.inner.load(Ordering::SeqCst) {
-
+                                //field type
                                 match class_name {
                                     "i32" => {
-                                        self.ser.buf.push(73);
+                                        self.ser.buf.push(73 as u8);
                                     }
                                     _ => {
 
                                     }
                                 }
-
-                                //field type
                                 self.ser.buf.extend_from_slice(&(key.len() as i16).to_be_bytes());
                                 self.ser.buf.extend_from_slice(key.as_bytes());
                             }
@@ -242,6 +247,18 @@ pub mod java {
 
             #[inline]
             fn end(self) -> Result<Self::Ok, Self::Error> {
+                if self.ser.inner.load(Ordering::SeqCst) {
+                    self.ser.buf.push(113);
+                    self.ser.buf.push(0);
+                    self.ser.buf.push(126);
+                    self.ser.buf.push(0);
+                    self.ser.buf.push(1);
+                    self.ser.buf.push(120); //TC_ENDBLOCKDATA
+                    self.ser.buf.push(112); //TC_NULL
+                    self.ser.inner.store(false, Ordering::SeqCst);
+                }
+                self.ser.buf.extend(self.ser.value_buf.iter());
+                self.ser.value_buf.clear();
                 Ok(())
             }
         }
@@ -264,6 +281,9 @@ pub mod java {
 
             buf: Vec<u8>,
             inner: AtomicBool,
+            value_buf : Vec<u8>,
+                                //simple name, (full name, serialuid, num of fields)
+            metadata_structs : HashMap<String, (String, i64, i16)>
         }
 
         impl JvmSerializer {
@@ -286,7 +306,10 @@ pub mod java {
 
 
             \u{0}��\u{0}\u{5}sr\u{0}5io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{1}\u{2}\u{0}\u{2}L\u{0}\u{6}nodeIdt\u{0}\u{12}Ljava/lang/String;L\u{0}\u{8}serverID
-            t\u{0}!Lio/vertx/core/net/impl/ServerID;xpt\u{0}$63f3dd04-6c9c-4686-856d-64312eae657as\u{0}\u{1f}io.vertx.core.net.impl.ServerIDN9\u{3}�g\u{1c}\u{11}�\u{2}\u{0}\u{2}I\u{0}\u{4}port\u{0}\u{0}��L\u{0}\u{4}hostt\u{0}\tlocalhost
+            t\u{0}!Lio/vertx/core/net/impl/ServerID;xpt\u{0}$838a4668-9a81-4359-b518-8b544f9bf611s\u{0}\u{1f}io.vertx.core.net.impl.ServerIDN9\u{3}�g\u{1c}\u{11}�\u{2}\u{0}\u{2}I\u{0}\u{4}portL\u{0}\u{4}hostq\u{0}~\u{0}\u{1}xp\u{0}\u{0}��t\u{0}\tlocalhost
+
+
+
              * <blockquote><pre>
              * B            byte
              * C            char
@@ -320,7 +343,7 @@ pub mod java {
                 let fields = SER::get_fields();
                 self.buf.extend_from_slice(&(fields.len() as i16).to_be_bytes());
                 //fields
-                for (name, type_) in fields {
+                for (name, type_, idx) in fields {
                     let mut jvm_type_name = String::new();
                     match type_.as_str() {
                         "i32" => {
@@ -371,76 +394,102 @@ pub mod java {
 
             #[inline]
             fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                if v {
+                    self.buf.push(1);
+                } else {
+                    self.buf.push(0);
+                }
+                Ok(())
             }
 
             #[inline]
             fn serialize_i8(self, v: i8) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
-            }
-
-            #[inline]
-            fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
-            }
-
-            #[inline]
-            fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
                 self.buf.extend_from_slice(&v.to_be_bytes());
                 Ok(())
             }
 
             #[inline]
+            fn serialize_i16(self, v: i16) -> Result<Self::Ok, Self::Error> {
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
+            }
+
+            #[inline]
+            fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
+                if self.inner.load(Ordering::SeqCst) {
+                    self.value_buf.extend_from_slice(&v.to_be_bytes());
+                } else {
+                    self.buf.extend_from_slice(&v.to_be_bytes());
+                }
+                Ok(())
+            }
+
+            #[inline]
             fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
             }
 
             #[inline]
             fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
             }
 
             #[inline]
             fn serialize_u16(self, v: u16) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
             }
 
             #[inline]
             fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
             }
 
             #[inline]
             fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
             }
 
             #[inline]
             fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
             }
 
             #[inline]
             fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(&v.to_be_bytes());
+                Ok(())
             }
 
             #[inline]
             fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.push(v as u8);
+                Ok(())
             }
 
             #[inline]
             fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-                self.buf.push(116);//TC_STRING
-                self.buf.extend_from_slice(&(v.len() as i16).to_be_bytes());
-                self.buf.extend_from_slice(v.as_bytes());
+                if self.inner.load(Ordering::SeqCst) {
+                    self.value_buf.push(116);//TC_STRING
+                    self.value_buf.extend_from_slice(&(v.len() as i16).to_be_bytes());
+                    self.value_buf.extend_from_slice(v.as_bytes());
+                } else {
+                    self.buf.push(116);//TC_STRING
+                    self.buf.extend_from_slice(&(v.len() as i16).to_be_bytes());
+                    self.buf.extend_from_slice(v.as_bytes());
+                }
                 Ok(())
             }
 
             #[inline]
             fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-                unimplemented!()
+                self.buf.extend_from_slice(v);
+                Ok(())
             }
 
             #[inline]

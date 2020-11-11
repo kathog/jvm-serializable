@@ -12,6 +12,6 @@ proc-macro = true
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 quote = "1.0"
-syn = { version = "1.0", features = ["full", "fold", "parsing"] }
+syn = { version = "1.0.33", default-features = true, features = ["derive", "parsing", "printing", "clone-impls", "visit"] }
 proc-macro2  = "1.0"
-
+serde_derive_internals = "0.25.0"
