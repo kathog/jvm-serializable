@@ -48,12 +48,7 @@ mod tests {
                 }
             };
 
-            // ServerID::set_field::<i32>(&mut node_id.serverID, "port", 1234);
-            // println!("{:?}", &node_id);
             oos.write_object(&node_id);
-
-
-            // let s = &node_id as &dyn Any + Sized;
         }
     }
 }

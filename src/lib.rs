@@ -30,6 +30,7 @@ pub mod java {
         use serde::export::{Formatter, TryFrom};
         use std::fmt;
         use std::sync::atomic::{AtomicBool, Ordering};
+        // use bincode::byteorder::{ByteOrder, BigEndian};
 
 
 
@@ -79,19 +80,20 @@ pub mod java {
             pub fn write_object<'a, SER>(&mut self, object: &SER)
             where SER:  Any + Serialize + Deserialize<'a> + Debug + Clone + Serializable {
                 self.write_object0(object);
-            
             }
-
-            
 
             #[inline]
             pub fn write_object0<'a, SER>(&mut self, object: &SER) 
             where SER:   Any + Serialize + Deserialize<'a> + Debug + Clone + Serializable {
 
+
+                let size = bincode::serialized_size(object).unwrap();
+
+                let time = Instant::now();
                 let mut jvm_ser = JvmSerializer {
-                    buf: Vec::with_capacity(1024),
+                    buf: Vec::with_capacity(size as usize),
                     inner: AtomicBool::new(false),
-                    value_buf: Vec::with_capacity(1024),
+                    value_buf: Vec::with_capacity(size as usize),
                     metadata_structs : HashMap::new()
                 };
 
@@ -306,34 +308,6 @@ pub mod java {
                 }
             }
 
-            /*
-
-            \u{0}��\u{0}\u{5}sr\u{0}5io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{1}\u{2}\u{0}\u{2}L\u{0}\u{6}nodeIdt\u{0}\u{12}Ljava/lang/String;L\u{0}\u{8}serverID
-            t\u{0}!Lio/vertx/core/net/impl/ServerID;xpt\u{0}$5e9c652c-2409-45d5-b598-483b32967e4asr\u{0}\u{1f}io.vertx.core.net.impl.ServerIDN9\u{3}�g\u{1c}\u{11}�\u{2}\u{0}\u{2}I\u{0}\u{4}portL\u{0}\u{4}hostq\u{0}~\u{0}\u{1}xp\u{0}\u{0}��t\u{0}\tlocalhost
-
-
-
-            \u{0}��\u{0}\u{5}sr\u{0}5io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{0}\u{1}\u{2}\u{0}\u{2}L\u{0}\u{6}nodeIdt\u{0}\u{12}Ljava/lang/String;L\u{0}\u{8}serverID
-            t\u{0}!Lio/vertx/core/net/impl/ServerID;xpt\u{0}$75d6fa4d-b312-4c80-8718-d5fbc05c0f53s\u{0}\u{1f}io.vertx.core.net.impl.ServerIDN9\u{3}�g\u{1c}\u{11}�\u{2}\u{0}\u{2}I\u{0}\u{4}portL\u{0}\u{4}hostq\u{0}~\u{0}\u{1}xp\u{0}\u{0}��t\u{0}\tlocalhost
-
-
-
-
-
-             * <blockquote><pre>
-             * B            byte
-             * C            char
-             * D            double
-             * F            float
-             * I            int
-             * J            long
-             * L            class or interface
-             * S            short
-             * Z            boolean
-             * [            array
-             * </pre></blockquote>
-             */
-
             pub fn write_head<SER>(&mut self, ob : &SER)
             where SER: Serializable {
 
@@ -358,6 +332,27 @@ pub mod java {
                     match type_.as_str() {
                         "i32" => {
                             self.buf.push('I' as u8);
+                        },
+                        "u8" => {
+                            self.buf.push('B' as u8);
+                        },
+                        "char" => {
+                            self.buf.push('C' as u8);
+                        },
+                        "f64" => {
+                            self.buf.push('D' as u8);
+                        },
+                        "f32" => {
+                            self.buf.push('F' as u8);
+                        },
+                        "i64" => {
+                            self.buf.push('J' as u8);
+                        },
+                        "i16" => {
+                            self.buf.push('S' as u8);
+                        },
+                        "bool" => {
+                            self.buf.push('Z' as u8);
                         },
                         "String" => {
                             self.buf.push('L' as u8);
@@ -544,27 +539,27 @@ pub mod java {
 
             #[inline]
             fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-                unimplemented!()
+                Ok(Compound { ser: self })
             }
 
             #[inline]
             fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-                unimplemented!()
+                Ok(Compound { ser: self })
             }
 
             #[inline]
             fn serialize_tuple_struct(self, name: &'static str, len: usize) -> Result<Self::SerializeTupleStruct, Self::Error> {
-                unimplemented!()
+                Ok(Compound { ser: self })
             }
 
             #[inline]
             fn serialize_tuple_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeTupleVariant, Self::Error> {
-                unimplemented!()
+                Ok(Compound { ser: self })
             }
 
             #[inline]
             fn serialize_map(self, len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-                unimplemented!()
+                Ok(Compound { ser: self })
             }
 
             #[inline]
@@ -574,12 +569,11 @@ pub mod java {
 
             #[inline]
             fn serialize_struct_variant(self, name: &'static str, variant_index: u32, variant: &'static str, len: usize) -> Result<Self::SerializeStructVariant, Self::Error> {
-                unimplemented!()
+                Ok(Compound { ser: self })
             }
 
             #[inline]
-            fn collect_str<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error> where
-                T: Display {
+            fn collect_str<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error> where T: Display {
                 unimplemented!()
             }
         }

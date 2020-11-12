@@ -148,7 +148,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
     let mut string_of_get_items = String::new();
     let mut count = 1;
     for inner in inner_types {
-        string_of_get_items.push_str(&format!(" fn get_item{}(&self) -> Option<&Self::Item{}> ", count, count));
+        string_of_get_items.push_str(&format!(" #[inline]\nfn get_item{}(&self) -> Option<&Self::Item{}> ", count, count));
         string_of_get_items.push_str("{");
         string_of_get_items.push_str(&format!(" Some(&self.{}) ", inner.0));
         string_of_get_items.push_str("}\n");
@@ -158,7 +158,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
         count += 1;
     }
     for i in count..6 {
-        string_of_get_items.push_str(&format!(" fn get_item{}(&self) -> Option<&Self::Item{}> ", i, i));
+        string_of_get_items.push_str(&format!(" #[inline]\nfn get_item{}(&self) -> Option<&Self::Item{}> ", i, i));
         string_of_get_items.push_str("{ None }\n");
         items.push_str(&format!(" type Item{} = {}; \n ", i, &struct_name));
     }
@@ -179,15 +179,18 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
             {{jvm_uid}}
         }
 
+        #[inline]
         fn get_field<T: std::any::Any + Clone + 'static>(s: &Self, field: &str) -> T {{
             let a : &dyn std::any::Any = {{get_body}};
             (a.downcast_ref::<T>().unwrap().clone())
         }}
 
+        #[inline]
         fn set_field<T: std::any::Any + Clone + 'static>(s: &mut Self, field: &str, val : T) {{
             {{set_body}}
         }}
 
+        #[inline]
         fn get_fields(&self) -> Vec<(String, String, i32)> {
             {{fields_string}}
         }
