@@ -72,14 +72,14 @@ pub mod java {
             }
 
             #[inline]
-            pub fn write_object<'a, SER>(&mut self, object: &SER)
-            where SER:  Any + Serialize + Deserialize<'a> + Debug + Clone + Serializable {
+            pub fn write_object<SER>(&mut self, object: &SER)
+            where SER: Any + Serialize + Debug + Clone + Serializable {
                 self.write_object0(object);
             }
 
             #[inline]
-            pub fn write_object0<'a, SER>(&mut self, object: &SER) 
-            where SER:   Any + Serialize + Deserialize<'a> + Debug + Clone + Serializable {
+            pub fn write_object0<SER>(&mut self, object: &SER)
+            where SER: Any + Serialize + Debug + Clone + Serializable {
 
 
                 let size = bincode::serialized_size(object).unwrap();
@@ -97,7 +97,6 @@ pub mod java {
                 object.serialize(&mut jvm_ser);
 
                 self.bout = jvm_ser.buf;
-                // println!("{:?}", String::from_utf8_lossy(&jvm_ser.buff()));
             }
 
             pub fn to_byte_array(&self) -> Vec<u8> {
@@ -125,13 +124,8 @@ pub mod java {
 
                 jvm_ser.read_head::<SER>();
                 return SER::deserialize(&mut jvm_ser).unwrap();
-
-                // return SER::default();
             }
         }
-
-
-
 
 
         pub struct Compound<'a> {

@@ -28,10 +28,6 @@ mod tests {
         serverID: ServerID,
     }
 
-    fn type_of<T>(_: T) -> &'static str {
-        type_name::<T>()
-    }
-
 
     #[test] 
     fn it_works() {
