@@ -222,6 +222,7 @@ pub mod java {
                 match jvm_data {
                     Some(data) => {
                         self.ser.buf.push(115); //TC_OBJECT
+                        self.ser.buf.push(114);
                         self.ser.buf.extend_from_slice(&(data.0.len() as i16).to_be_bytes());
                         self.ser.buf.extend_from_slice(data.0.as_bytes());
 
@@ -807,7 +808,7 @@ pub mod java {
                 let inner_type_code = self.buf[self.read_idx];
                 if inner_type_code == 115 { //TC_OBJECT
                     // consume inner object header
-                    self.read_idx +=1;
+                    self.read_idx +=2;
                     let string_len = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx+2].try_into().unwrap()) as usize;
                     self.read_idx += 2;
                     let _string_value = String::from_utf8_lossy(self.buf[self.read_idx..self.read_idx + string_len].try_into().unwrap());
