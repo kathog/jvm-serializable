@@ -103,7 +103,7 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
         }).last().unwrap().to_string();
 
     let output = quote! {
-        #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
+        #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, Default)]
         #input
     }; 
     let mut out_as_string = output.to_string();

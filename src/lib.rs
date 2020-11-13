@@ -9,9 +9,6 @@ extern crate serde;
 extern crate jvm_macro;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate traitcast;
-
 
 pub mod java {
 
@@ -30,6 +27,8 @@ pub mod java {
         use serde::export::{Formatter, TryFrom};
         use std::fmt;
         use std::sync::atomic::{AtomicBool, Ordering};
+        use serde::de::Visitor;
+        use std::convert::TryInto;
         // use bincode::byteorder::{ByteOrder, BigEndian};
 
 
@@ -89,19 +88,24 @@ pub mod java {
 
                 let size = bincode::serialized_size(object).unwrap();
 
-                let time = Instant::now();
                 let mut jvm_ser = JvmSerializer {
                     buf: Vec::with_capacity(size as usize),
-                    inner: AtomicBool::new(false),
+                    inner: false,
                     value_buf: Vec::with_capacity(size as usize),
-                    metadata_structs : HashMap::new()
+                    metadata_structs : HashMap::new(),
+                    read_idx: 0
                 };
 
                 jvm_ser.build_metadata(Some(object));
                 jvm_ser.write_head(object);
                 object.serialize(&mut jvm_ser);
 
+                self.bout = jvm_ser.buf;
                 // println!("{:?}", String::from_utf8_lossy(&jvm_ser.buff()));
+            }
+
+            pub fn to_byte_array(&self) -> Vec<u8> {
+                self.bout.clone()
             }
 
         }
@@ -109,6 +113,31 @@ pub mod java {
         pub struct ObjectInputStream {
 
         }
+
+        impl ObjectInputStream {
+            #[inline]
+            pub fn read_object<'a, SER>(&mut self, data: Vec<u8>) -> SER
+                where SER:  Any + Serialize + Deserialize<'a> + Debug + Clone + Serializable + Default {
+
+                let mut jvm_ser = JvmSerializer {
+                    buf: data,
+                    inner: false,
+                    value_buf: Vec::with_capacity(0),
+                    metadata_structs : HashMap::new(),
+                    read_idx: 0
+                };
+
+                jvm_ser.read_head::<SER>();
+                return SER::deserialize(&mut jvm_ser).unwrap();
+
+                // return SER::default();
+            }
+        }
+
+
+
+
+
         pub struct Compound<'a> {
             ser: &'a mut JvmSerializer,
         }
@@ -210,20 +239,20 @@ pub mod java {
                         self.ser.buf.push(2); // flagi
                         self.ser.buf.extend_from_slice(&data.2.to_be_bytes());
 
-                        self.ser.inner.store(true, Ordering::SeqCst);
+                        self.ser.inner = true;
                     },
                     None => {
 
                         match class_name {
                             "i32" => {
-                                if self.ser.inner.load(Ordering::SeqCst) {
+                                if self.ser.inner {
                                     self.ser.buf.push(73 as u8);
                                     self.ser.buf.extend_from_slice(&(key.len() as i16).to_be_bytes());
                                     self.ser.buf.extend_from_slice(key.as_bytes());
                                 }
                             }
                             "alloc::string::String" => {
-                                if self.ser.inner.load(Ordering::SeqCst) {
+                                if self.ser.inner {
                                     //field type - String
                                     self.ser.buf.push(76);
                                     self.ser.buf.extend_from_slice(&(key.len() as i16).to_be_bytes());
@@ -242,7 +271,7 @@ pub mod java {
 
             #[inline]
             fn end(self) -> Result<Self::Ok, Self::Error> {
-                if self.ser.inner.load(Ordering::SeqCst) {
+                if self.ser.inner {
                     self.ser.buf.push(113);
                     self.ser.buf.push(0);
                     self.ser.buf.push(126);
@@ -250,7 +279,7 @@ pub mod java {
                     self.ser.buf.push(1);
                     self.ser.buf.push(120); //TC_ENDBLOCKDATA
                     self.ser.buf.push(112); //TC_NULL
-                    self.ser.inner.store(false, Ordering::SeqCst);
+                    self.ser.inner = false;
                 }
                 self.ser.buf.extend(self.ser.value_buf.iter());
                 self.ser.value_buf.clear();
@@ -275,19 +304,17 @@ pub mod java {
         pub struct JvmSerializer {
 
             buf: Vec<u8>,
-            inner: AtomicBool,
+            inner: bool,
             value_buf : Vec<u8>,
                                 //simple name, (full name, serialuid, num of fields)
-            metadata_structs : HashMap<String, (String, i64, i16)>
+            metadata_structs : HashMap<String, (String, i64, i16)>,
+            read_idx: usize
+
         }
 
         impl JvmSerializer {
 
-            pub fn buff(&self) -> Vec<u8> {
-                self.buf.clone()
-            }
-
-
+            #[inline]
             fn build_metadata<T>(&mut self, ob: Option<&T>) where T: Serializable + Debug {
                 match ob {
                     Some(object) => {
@@ -308,6 +335,43 @@ pub mod java {
                 }
             }
 
+            #[inline]
+            pub fn read_head<SER>(&mut self) {
+                //ignore first 7 bytes
+                self.read_idx = 7;
+                let class_name_len = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx + 2].try_into().unwrap());
+                self.read_idx += 2;
+                let _class_name = String::from_utf8_lossy(self.buf[self.read_idx..self.read_idx + class_name_len as usize].try_into().unwrap());
+                self.read_idx += class_name_len as usize;
+                //serialVersionUID
+                self.read_idx += 8;
+                //class flags
+                self.read_idx += 1;
+                //fields len
+                let num_fileds = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx + 2].try_into().unwrap());
+                self.read_idx += 2;
+                //fields
+                for i in 0..num_fileds {
+                    let f_type = char::from(self.buf[self.read_idx]);
+                    self.read_idx += 1;
+                    let field_len = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx + 2].try_into().unwrap());
+                    self.read_idx += 2;
+                    let _field_name = String::from_utf8_lossy(self.buf[self.read_idx..self.read_idx + field_len as usize].try_into().unwrap());
+                    self.read_idx += field_len as usize;
+
+                    if f_type == 'L' {
+                        let _tc_string = char::from(self.buf[self.read_idx]);
+                        self.read_idx += 1;
+                        let field_type_len = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx + 2].try_into().unwrap());
+                        self.read_idx += 2;
+                        let _field_type = String::from_utf8_lossy(self.buf[self.read_idx..self.read_idx + field_type_len as usize].try_into().unwrap());
+                        self.read_idx += field_type_len as usize;
+                    }
+                }
+                self.read_idx += 2;//TC_ENDBLOCKDATA, TC_NULL
+            }
+
+            #[inline]
             pub fn write_head<SER>(&mut self, ob : &SER)
             where SER: Serializable {
 
@@ -423,7 +487,7 @@ pub mod java {
 
             #[inline]
             fn serialize_i32(self, v: i32) -> Result<Self::Ok, Self::Error> {
-                if self.inner.load(Ordering::SeqCst) {
+                if self.inner {
                     self.value_buf.extend_from_slice(&v.to_be_bytes());
                 } else {
                     self.buf.extend_from_slice(&v.to_be_bytes());
@@ -481,7 +545,7 @@ pub mod java {
 
             #[inline]
             fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-                if self.inner.load(Ordering::SeqCst) {
+                if self.inner {
                     self.value_buf.push(116);//TC_STRING
                     self.value_buf.extend_from_slice(&(v.len() as i16).to_be_bytes());
                     self.value_buf.extend_from_slice(v.as_bytes());
@@ -578,6 +642,227 @@ pub mod java {
             }
         }
 
+
+
+        impl<'de, 'a> Deserializer<'de> for &'a mut JvmSerializer {
+            type Error = Error;
+
+            fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_bool<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_i8<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_i16<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_i32<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+
+                let value = i32::from_be_bytes(self.buf[self.read_idx..self.read_idx + 4].try_into().unwrap());
+                self.read_idx += 4;
+                visitor.visit_i32(value)
+            }
+
+            fn deserialize_i64<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_u8<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_u16<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_u32<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_u64<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_f32<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_f64<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_char<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_str<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_string<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                self.read_idx += 1;
+                let string_len = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx+2].try_into().unwrap()) as usize;
+                self.read_idx += 2;
+                let string_value = String::from_utf8_lossy(self.buf[self.read_idx..self.read_idx + string_len].try_into().unwrap());
+                self.read_idx += string_len;
+
+                visitor.visit_string(string_value.to_string())
+            }
+
+            fn deserialize_bytes<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_byte_buf<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_option<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_unit<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_seq<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+
+                struct Access<'a> {
+                    deserializer: &'a mut JvmSerializer,
+                    len: usize,
+                }
+
+                impl<'de, 'a> serde::de::SeqAccess<'de> for Access<'a> {
+                    type Error = Error;
+
+                    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Error>
+                        where T: serde::de::DeserializeSeed<'de>, {
+                        if self.len > 0 {
+                            self.len -= 1;
+                            let value =
+                                serde::de::DeserializeSeed::deserialize(seed, &mut *self.deserializer)?;
+                            Ok(Some(value))
+                        } else {
+                            Ok(None)
+                        }
+                    }
+
+                    fn size_hint(&self) -> Option<usize> {
+                        Some(self.len)
+                    }
+                }
+
+                visitor.visit_seq(Access {
+                    deserializer: self,
+                    len,
+                })
+
+            }
+
+            fn deserialize_tuple_struct<V>(self, name: &'static str, len: usize, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_map<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_struct<V>(self, name: &'static str, fields: &'static [&'static str], visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+
+                let inner_type_code = self.buf[self.read_idx];
+                if inner_type_code == 115 { //TC_OBJECT
+                    // consume inner object header
+                    self.read_idx +=1;
+                    let string_len = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx+2].try_into().unwrap()) as usize;
+                    self.read_idx += 2;
+                    let _string_value = String::from_utf8_lossy(self.buf[self.read_idx..self.read_idx + string_len].try_into().unwrap());
+                    self.read_idx += string_len;
+                    let _uuid = i64::from_be_bytes(self.buf[self.read_idx..self.read_idx+8].try_into().unwrap());
+                    self.read_idx += 8;
+                    self.read_idx += 3;
+
+                    for _f in fields {
+                        let _code = self.buf[self.read_idx];
+                        self.read_idx += 1;
+                        let string_len = i16::from_be_bytes(self.buf[self.read_idx..self.read_idx+2].try_into().unwrap()) as usize;
+                        self.read_idx += 2;
+                        let _string_value = String::from_utf8_lossy(self.buf[self.read_idx..self.read_idx + string_len].try_into().unwrap());
+                        self.read_idx += string_len;
+                    }
+                    self.read_idx += 7;
+
+                    self.inner = true;
+                }
+
+                self.deserialize_tuple(fields.len(), visitor)
+            }
+
+            fn deserialize_enum<V>(self, name: &'static str, variants: &'static [&'static str], visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_identifier<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+
+            fn deserialize_ignored_any<V>(self, visitor: V) -> Result<<V as Visitor<'de>>::Value, Self::Error> where
+                V: Visitor<'de> {
+                unimplemented!()
+            }
+        }
+
+
+
+
+
+
         #[derive(Debug)]
         pub struct Error {
             err: Box<ErrorImpl>,
@@ -610,6 +895,14 @@ pub mod java {
         }
 
         impl serde::ser::Error for Error {
+
+            fn custom<T>(msg: T) -> Self where
+                T: Display {
+                unimplemented!()
+            }
+        }
+
+        impl serde::de::Error for Error {
 
             fn custom<T>(msg: T) -> Self where
                 T: Display {

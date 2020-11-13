@@ -45,10 +45,14 @@ mod tests {
                 serverID : ServerID {
                     port: 45809,
                     host: String::from("localhost")
-                }
+                },
             };
 
             oos.write_object(&node_id);
+
+            let mut ois = ObjectInputStream{};
+            let node : ClusterNodeInfo = ois.read_object(oos.to_byte_array());
+            println!("{:?}", node);
         }
     }
 }
