@@ -16,14 +16,14 @@ mod tests {
     use std::collections::hash_map::RandomState;
 
     #[jvm_object(io.vertx.core.net.impl.ServerID,5636540499169644934)]
-    struct ServerID {
+    struct ServerID_tmp {
         port: i32,
         host: String
     }
 
 
     #[jvm_object(io.vertx.core.eventbus.impl.clustered.ClusterNodeInfo,1)]
-    struct ClusterNodeInfo {
+    struct ClusterNodeInfo_tmp {
         nodeId: String,
         serverID: ServerID,
     }
@@ -34,9 +34,9 @@ mod tests {
 
         for i in 0..10 {
             let mut oos = ObjectOutputStream::new();
-            let mut node_id = ClusterNodeInfo {
+            let mut node_id = ClusterNodeInfo_tmp {
                 nodeId: uuid::Uuid::new_v4().to_string(),
-                serverID : ServerID {
+                serverID : ServerID_tmp {
                     port: 45809,
                     host: String::from("localhost")
                 },
