@@ -14,8 +14,6 @@ mod tests {
     use std::collections::HashMap;
     use std::any::{type_name};
     use std::collections::hash_map::RandomState;
-    use serde_json::Value;
-
 
     #[jvm_object(io.vertx.core.net.impl.ServerID,5636540499169644934)]
     struct ServerID {

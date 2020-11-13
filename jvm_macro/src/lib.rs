@@ -132,9 +132,6 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
     }
     set_body.push_str("_ => { panic!(\"invalid field\"); } }");
 
-
-    println!("{:?}", struct_props);
-
     let mut struct_props_as_string = String::from("[");
     let mut idx = 0;
     for (key, value) in &struct_props {
@@ -207,6 +204,5 @@ pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStr
         .replace("{{get_items}}", &string_of_get_items)
         .replace("{{items}}", &items)
     );
-    println!("{:?}", out_as_string);
     proc_macro::TokenStream::from_str(&out_as_string).unwrap()
 }

@@ -7,8 +7,6 @@
 extern crate serde;
 #[macro_use]
 extern crate jvm_macro;
-#[macro_use]
-extern crate lazy_static;
 
 pub mod java {
 
@@ -22,14 +20,12 @@ pub mod java {
         use std::sync::{Mutex, Arc};
         use std::fmt::{Debug, Display};
         use std::time::Instant;
-        use serde_json::ser::State;
         use serde::ser::{SerializeSeq, SerializeTuple, SerializeTupleStruct, SerializeTupleVariant, SerializeMap, SerializeStructVariant, SerializeStruct};
         use serde::export::{Formatter, TryFrom};
         use std::fmt;
         use std::sync::atomic::{AtomicBool, Ordering};
         use serde::de::Visitor;
         use std::convert::TryInto;
-        // use bincode::byteorder::{ByteOrder, BigEndian};
 
 
 
