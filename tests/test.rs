@@ -28,6 +28,17 @@ mod tests {
         serverID: ServerID,
     }
 
+    #[jvm_object(java.lang.Object,0)]
+    struct Object {
+        key: String,
+        value: String,
+    }
+
+    #[jvm_object(io.vertx.spi.cluster.zookeeper.impl.ZKSyncMap$KeyValue,6529685098267757690)]
+    struct ZKSyncMapKeyValue {
+        key: Object,
+    }
+
 
     #[test] 
     fn it_works() {
@@ -54,6 +65,19 @@ mod tests {
 
             let node : ClusterNodeInfo = ois.read_object(oos.to_byte_array());
             println!("{:?}", node);
+
+
+            let kv = ZKSyncMapKeyValue {
+                key : Object {
+                    key: "0e4b0367-c5e6-4559-9284-282f27349de7".to_string(),
+                    value: "{\"verticles\":[],\"group\":\"__DISABLED__\",\"server_id\":{\"host\":\"localhost\",\"port\":41469}}".to_string()
+                }
+            };
+
+            let mut oos = ObjectOutputStream::new();
+            oos.write_object(&kv);
+            println!("{:?}", String::from_utf8_lossy(&oos.to_byte_array()));
+
         }
     }
 }

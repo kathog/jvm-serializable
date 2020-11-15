@@ -89,7 +89,8 @@ pub mod java {
                     inner: false,
                     value_buf: Vec::with_capacity(size as usize),
                     metadata_structs : HashMap::new(),
-                    read_idx: 0
+                    read_idx: 0,
+                    inner_is_object: false,
                 };
 
                 jvm_ser.build_metadata(Some(object));
@@ -119,7 +120,8 @@ pub mod java {
                     inner: false,
                     value_buf: Vec::with_capacity(0),
                     metadata_structs : HashMap::new(),
-                    read_idx: 0
+                    read_idx: 0,
+                    inner_is_object: false,
                 };
 
                 jvm_ser.read_head::<SER>();
@@ -221,14 +223,17 @@ pub mod java {
                 let jvm_data = self.ser.metadata_structs.get(class_name);
                 match jvm_data {
                     Some(data) => {
-                        self.ser.buf.push(115); //TC_OBJECT
-                        self.ser.buf.push(114);
-                        self.ser.buf.extend_from_slice(&(data.0.len() as i16).to_be_bytes());
-                        self.ser.buf.extend_from_slice(data.0.as_bytes());
 
-                        self.ser.buf.extend_from_slice(&data.1.to_be_bytes());
-                        self.ser.buf.push(2); // flagi
-                        self.ser.buf.extend_from_slice(&data.2.to_be_bytes());
+                        if data.0 != "java.lang.Object" {
+                            self.ser.buf.push(115); //TC_OBJECT
+                            self.ser.buf.push(114);
+                            self.ser.buf.extend_from_slice(&(data.0.len() as i16).to_be_bytes());
+                            self.ser.buf.extend_from_slice(data.0.as_bytes());
+
+                            self.ser.buf.extend_from_slice(&data.1.to_be_bytes());
+                            self.ser.buf.push(2); // flagi
+                            self.ser.buf.extend_from_slice(&data.2.to_be_bytes());
+                        }
 
                         self.ser.inner = true;
                     },
@@ -245,9 +250,15 @@ pub mod java {
                             "alloc::string::String" => {
                                 if self.ser.inner {
                                     //field type - String
-                                    self.ser.buf.push(76);
-                                    self.ser.buf.extend_from_slice(&(key.len() as i16).to_be_bytes());
-                                    self.ser.buf.extend_from_slice(key.as_bytes());
+                                    if !self.ser.inner_is_object {
+                                        self.ser.buf.push(76);
+                                        self.ser.buf.extend_from_slice(&(key.len() as i16).to_be_bytes());
+                                        self.ser.buf.extend_from_slice(key.as_bytes());
+                                    } else {
+                                        self.ser.inner_is_object = false;
+                                    }
+
+
                                 }
                             }
                             _ => {
@@ -297,6 +308,7 @@ pub mod java {
             buf: Vec<u8>,
             inner: bool,
             value_buf : Vec<u8>,
+            inner_is_object: bool,
                                 //simple name, (full name, serialuid, num of fields)
             metadata_structs : HashMap<String, (String, i64, i16)>,
             read_idx: usize
@@ -381,6 +393,7 @@ pub mod java {
                 //fields len
                 let fields = ob.get_fields();
                 self.buf.extend_from_slice(&(fields.len() as i16).to_be_bytes());
+
                 //fields
                 for (name, type_, idx) in fields {
                     let mut jvm_type_name = String::new();
@@ -419,6 +432,9 @@ pub mod java {
                             let jvm_data = self.metadata_structs.get(&type_);
                             match jvm_data {
                                 Some(data) => {
+                                    if data.0 == "java.lang.Object" {
+                                        self.inner_is_object = true;
+                                    }
                                     jvm_type_name.push_str(&data.0.replace(".", "/"));
                                 },
                                 None => {}
@@ -435,8 +451,10 @@ pub mod java {
                         self.buf.extend_from_slice(jvm_type_name.as_bytes());
                     }
                 }
-                self.buf.push(120); //TC_ENDBLOCKDATA
-                self.buf.push(112); // TC_NULL
+                if !self.inner_is_object {
+                    self.buf.push(120); //TC_ENDBLOCKDATA
+                    self.buf.push(112); // TC_NULL
+                }
             }
 
         }
