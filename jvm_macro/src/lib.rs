@@ -2,21 +2,13 @@ extern crate proc_macro;
 extern crate proc_macro2;
 #[macro_use]
 extern crate quote;
-#[macro_use]
 extern crate syn;
 extern crate serde_derive_internals;
-#[macro_use]
 extern crate serde;
 
 use proc_macro2::TokenStream;
 use std::str::FromStr;
-use std::collections::HashMap;
 use proc_macro2::TokenTree;
-
-use serde_derive_internals::*;
-use syn::*;
-use std::any::Any;
-use std::path::Prefix::Verbatim;
 
 #[proc_macro_attribute]
 pub fn jvm_object(metadata: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
