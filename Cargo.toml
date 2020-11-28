@@ -1,8 +1,13 @@
 [package]
 name = "jvm-serializable"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Daniel Lewiński <nerull@craftsoft.eu>"]
 edition = "2018"
+description = "Simple Rust version of jvm standard serialize and deserialize"
+license-file = "LICENSE"
+homepage = "https://github.com/kathog/jvm-serializable"
+repository = "https://github.com/kathog/jvm-serializable"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
