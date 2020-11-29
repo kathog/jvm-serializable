@@ -3,7 +3,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 extern crate serde;
 #[macro_use]
 extern crate jvm_macro;
-#[path = "../src/lib.rs"]
+
 extern crate jvm_serializable;
 use jvm_serializable::java::io::*;
 
@@ -37,11 +37,6 @@ fn serilze(_c: &mut Criterion) {
     _c.bench_function("build_trace", |b| b.iter(|| {
         oos.write_object(&node_id);
     }));
-
-    _c.bench_function("build_json", |b| b.iter(|| {
-       serde_json::to_value(&node_id).unwrap();
-    }));
-
 }
 
 

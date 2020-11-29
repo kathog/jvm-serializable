@@ -11,9 +11,6 @@ mod tests {
     extern crate serde;
 
     use jvm_serializable::java::io::*;
-    use std::collections::HashMap;
-    use std::any::{type_name};
-    use std::collections::hash_map::RandomState;
 
     #[jvm_object(io.vertx.core.net.impl.ServerID,5636540499169644934)]
     struct ServerID {
@@ -43,9 +40,9 @@ mod tests {
     #[test] 
     fn it_works() {
 
-        for i in 0..10 {
+        for _ in 0..10 {
             let mut oos = ObjectOutputStream::new();
-            let mut node_id = ClusterNodeInfo {
+            let node_id = ClusterNodeInfo {
                 nodeId: "fce2f0d9-4db9-4eba-b044-a061ba4e5743".to_string(),
                 serverID : ServerID {
                     port: 46511,

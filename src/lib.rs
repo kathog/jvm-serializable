@@ -1,7 +1,6 @@
 #![feature(type_name_of_val)]
 #![feature(core_intrinsics)]
 #![feature(get_mut_unchecked)]
-#![feature(optin_builtin_traits)]
 
 #[macro_use]
 extern crate serde;
@@ -27,16 +26,6 @@ pub mod java {
         use serde::de::Visitor;
         use std::convert::TryInto;
 
-
-
-
-        fn type_of<T>(o: &T) -> &'static str {
-            type_name_of_val(o)
-        }
-
-        fn type_id<T: ?Sized + Any>(_s: &T) -> TypeId {
-            TypeId::of::<T>().clone()
-        }
 
         pub trait Serializable  {
 
@@ -95,7 +84,7 @@ pub mod java {
 
                 jvm_ser.build_metadata(Some(object));
                 jvm_ser.write_head(object);
-                object.serialize(&mut jvm_ser);
+                let _ = object.serialize(&mut jvm_ser);
 
                 self.bout = jvm_ser.buf;
             }
