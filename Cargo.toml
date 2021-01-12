@@ -1,6 +1,6 @@
 [package]
 name = "jvm-serializable"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Daniel Lewiński <nerull@craftsoft.eu>"]
 edition = "2018"
 description = "Simple Rust version of jvm standard serialize and deserialize"
